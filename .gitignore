@@ -1,0 +1,11 @@
+*.crt
+*.key
+.vscode
+init
+SCRATCH.md
+**/key.txt
+**/.env
+**/node_modules
+/dist/
+/out/
+/cache/
