@@ -8,13 +8,12 @@ import { BlockdaemonERC1404 } from './BlockdaemonERC1404'
 
 async function main() {
 
-  const EOAwallet = privateKeyToAccount('0x2a871d0798f97d79848a013d4936a73bf4cc922c825d33c1cf7073dff6d409c6')
-
   const publicClient = createPublicClient({
     chain: anvil,
     transport: http()
   })
 
+  const EOAwallet = privateKeyToAccount('0x2a871d0798f97d79848a013d4936a73bf4cc922c825d33c1cf7073dff6d409c6')
   const walletClient = createWalletClient({ 
     account: EOAwallet,
     chain: anvil,
@@ -34,29 +33,43 @@ async function main() {
   }))}\n`);
 
 
-  // !!! deploy and mint ERC20 contract with gas sponsor
+  // !!! execute delegation transaction with gas sponsor
 
+  console.log(`Wallet EOA delegating Smart EOA contract... through sponsor...`)
   let authorization = await walletClient.signAuthorization({
     account: EOAwallet,
     contractAddress: smartEOAcontract.contractAddress,
     sponsor: sponsorWallet,
   })
-  //console.log(`Signed Authorization: ${authorization.chainId} ${authorization.nonce} ${authorization.contractAddress}`);
 
   let hash = await walletClient.writeContract({ 
+    abi: smartEOAcontract.abi, 
+    address: walletClient.account.address, 
+    functionName: 'execute', 
+    args: [[ 
+      { 
+        data: "0x", 
+        to: "0x0000000000000000000000000000000000000000",  //ERC1404 token contract
+        value: parseEther('0'),
+      }
+    ]], 
+    authorizationList: [authorization], 
+    account: sponsorWallet
+  }) 
+
+  await publicClient.getTransaction({ hash }).then(console.log)
+
+
+  // !!! deploy and mint ERC20 contract with gas sponsor
+
+  console.log(`Wallet EOA deploying ERC20 contract...through sponsor...`)
+  hash = await walletClient.writeContract({ 
     abi: smartEOAcontract.abi,
     address: walletClient.account.address, 
     functionName: 'deployContract',
     args: [BlockdaemonERC1404.bytecode],
-    authorizationList: [authorization],
     account: sponsorWallet
   })
-
-  let txn = await publicClient.getTransaction({ hash })
-  console.log(`transaction.type: ${txn.type}`)
-  console.log(`transaction.to: ${txn.to}`)
-  console.log(`transaction.from: ${txn.from}`)
-  console.log(`transaction.authorizationList: ${JSON.stringify(txn.authorizationList)}\n`)
 
   await publicClient.waitForTransactionReceipt({ 
     hash: hash
@@ -83,13 +96,7 @@ async function main() {
 
   // !!! transfer ERC20 from wallet with gas sponsor
 
-  authorization = await walletClient.signAuthorization({
-    account: EOAwallet,
-    contractAddress: smartEOAcontract.contractAddress,
-    sponsor: sponsorWallet,
-  })
-  //console.log(`Signed Authorization: ${authorization.chainId} ${authorization.nonce} ${authorization.contractAddress}`);
-
+  console.log(`Wallet EOA transfering ERC20 funds to recipient... through sponsor...`)
   const data = encodeFunctionData({
     abi: BlockdaemonERC1404.abi,
     functionName: 'transfer',
@@ -107,7 +114,6 @@ async function main() {
         value: parseEther('0'),
       }
     ]], 
-    authorizationList: [authorization], 
     account: sponsorWallet
   }) 
 

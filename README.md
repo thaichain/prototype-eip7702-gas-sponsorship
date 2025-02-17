@@ -15,13 +15,21 @@ sequenceDiagram
         participant Token as Token<br>contract
     end
 
-    TransactionManager->>EOA: Construct and sign EIP-7702 txn Authorization tuple<br>(chainId, delegated contract address, nonce)
-    EOA-->>TransactionManager: Authorization signature
+    critical Set one time smart account delegation
+        TransactionManager->>EOA: Construct and sign EIP-7702 txn Authorization tuple<br>(chainId, delegated contract address, nonce)
+        EOA-->>TransactionManager: Authorization signature
+        TransactionManager->>TransactionManager: Construct unsigned txn type=4<br>(to=self, authorization_list=authorization, calldata=0x)
+        TransactionManager->>Sponsor: Serialize and sign txn with Sponsor
+        TransactionManager->>ContractAddress: Broadcast txn on-chain<br>eth_sendRawTransaction(signed txn)
+        ContractAddress-->>Sponsor: Gas deducted from balance
+        ContractAddress->>ContractAddress: Set EOA delegation addres
+    end
+
     TransactionManager->>TransactionManager: Craft inner contract call<br>(to=token contract, calldata=transfer(to=recipient,value=10))
 
     TransactionManager->>TransactionManager: Craft outer contract call<br>(calldata=execute(inner contract call))
 
-    TransactionManager->>TransactionManager: Construct unsigned txn type=4<br>(to=self, authorization_list=authorization, calldata=outer contract call)
+    TransactionManager->>TransactionManager: Construct unsigned txn<br>(to=self, calldata=outer contract call)
 
     TransactionManager->>Sponsor: Serialize and sign txn with Sponsor
 
@@ -42,16 +50,9 @@ anvil --hardfork prague
 ```shell
 forge create --private-key 0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80 \
     --broadcast src/BatchCallDelegation.sol:BatchCallDelegation
-forge inspect src/BatchCallDelegation.sol:BatchCallDelegation abi
 ```
 
-### Get ERC20 token contract bytecode and ABI for Smart EOA to deploy (added to smartEOAcontract.ts const)
-```shell
-forge create  src/BlockdaemonERC1404.sol:BlockdaemonERC1404
-forge inspect BlockdaemonERC1404 bytecode abi
-```
-
-### Fund Wallet and Gas Sponsor EOAs
+### Fund EOA Wallet (0 ETH) and Gas Sponsor EOA (10 ETH)
 ```shell
 cast rpc anvil_setBalance 0xa0Ee7A142d267C1f36714E4a8F75612F20a79720 0
 cast rpc anvil_setBalance 0x70997970C51812dc3A010C7d01b50e0d17dc79C8 10000000000000000000
