@@ -1,0 +1,10 @@
+{
+  "dependencies": {
+    "express": "^4.21.2",
+    "json-rpc-2.0": "^1.7.0",
+    "viem": "^2.23.2"
+  },
+  "devDependencies": {
+    "@types/express": "^5.0.0"
+  }
+}

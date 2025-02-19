@@ -1,10 +1,12 @@
-import { createEIP1193Provider } from "@blockdaemon/buildervault-web3-provider";
-import { createWalletClient, createPublicClient,http, custom, parseEther, formatEther, encodeFunctionData } from 'viem'
+import { createWalletClient, createPublicClient, http, parseEther, formatEther, encodeFunctionData } from 'viem'
 import { anvil } from 'viem/chains'
-import { AuthorizationList, eip7702Actions, prepareAuthorization } from 'viem/experimental'
+import { eip7702Actions } from 'viem/experimental'
 import { privateKeyToAccount } from 'viem/accounts'
 import { smartEOAcontract } from './smartEOAcontract'
 import { BlockdaemonERC1404 } from './BlockdaemonERC1404'
+
+const sponsorWalletPublicKey = '0x70997970C51812dc3A010C7d01b50e0d17dc79C8'  // Sponsoring RPC node has private key mounted to sign unsigned txn and broadcast
+const tokenRecipientPublicKey = '0xcb98643b8786950F0461f3B0edf99D88F274574D'
 
 async function main() {
 
@@ -13,131 +15,169 @@ async function main() {
     transport: http()
   })
 
-  const EOAwallet = privateKeyToAccount('0x2a871d0798f97d79848a013d4936a73bf4cc922c825d33c1cf7073dff6d409c6')
-  const walletClient = createWalletClient({ 
+  const EOAwallet = privateKeyToAccount('0x2a871d0798f97d79848a013d4936a73bf4cc922c825d33c1cf7073dff6d409c6') // PublicKey: 0xa0Ee7A142d267C1f36714E4a8F75612F20a79720
+
+  // Create EOA wallet client to sign Authorization # TODO: Use BuilderVault EIP1193 web3 provider for MPC signing
+  const EOAwalletClient = createWalletClient({ 
     account: EOAwallet,
     chain: anvil,
     transport: http(),
   }).extend(eip7702Actions())
 
-  const sponsorWallet = privateKeyToAccount('0x59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d') 
-
-  // Get ETH Balance
-  console.log(`Wallet ${EOAwallet.address} balance before txn: ${formatEther(await publicClient.getBalance({
-    address: EOAwallet.address,
-  }))}`);
-
-  // Get ETH Balance of sponsor
-  console.log(`Sponsor ${sponsorWallet.address} balance before txn: ${formatEther(await publicClient.getBalance({
-    address: sponsorWallet.address,
-  }))}\n`);
-
-
-  // !!! execute delegation transaction with gas sponsor
-
-  console.log(`Wallet EOA delegating Smart EOA contract... through sponsor...`)
-  let authorization = await walletClient.signAuthorization({
-    account: EOAwallet,
-    contractAddress: smartEOAcontract.contractAddress,
-    sponsor: sponsorWallet,
+  // Create sponsor wallet client to relay through Sponsor RPC API
+  const sponsorWalletClient = createWalletClient({ 
+    account: sponsorWalletPublicKey,
+    chain: anvil,
+    transport: http("http://localhost:9999"),
   })
 
-  let hash = await walletClient.writeContract({ 
-    abi: smartEOAcontract.abi, 
-    address: walletClient.account.address, 
-    functionName: 'execute', 
+  // Log ETH Balance of EOA wallet
+  console.log(`EOA wallet ${EOAwallet.address} ETH balance before txn: ${formatEther(await publicClient.getBalance({
+    address: EOAwallet.address,
+  }))} ETH`);
+
+  // Log ETH Balance of sponsor wallet
+  console.log(`Sponsor ${sponsorWalletPublicKey} ETH balance before txn: ${formatEther(await publicClient.getBalance({
+    address: sponsorWalletPublicKey,
+  }))} ETH\n`);
+
+// ===================================
+// ======== EXECUTE DELEGATION TXN ===
+// ======== USING GAS SPONSOR RPC ====
+// ===================================
+
+  console.log(`\nEOA Wallet delegating Smart EOA implementation contract through sponsor...`)
+
+  // Sign Authorization with EOA wallet
+  let authorization = await EOAwalletClient.signAuthorization({
+    account: EOAwallet,
+    contractAddress: smartEOAcontract.contractAddress,
+    sponsor: sponsorWalletPublicKey,
+  })
+
+  // Construct empty execute() call to be included with signed authorization txn
+  let data = encodeFunctionData({
+    abi: smartEOAcontract.abi,
+    functionName: 'execute',
     args: [[ 
       { 
         data: "0x", 
-        to: "0x0000000000000000000000000000000000000000",  //ERC1404 token contract
+        to: "0x0000000000000000000000000000000000000000",
         value: parseEther('0'),
       }
-    ]], 
-    authorizationList: [authorization], 
-    account: sponsorWallet
-  }) 
+    ]],
+  })
 
+  // Send unsigned authorization txn to sponsor to sign and broadcast (eth_sendTransaction)
+  let hash = await sponsorWalletClient.sendTransaction({
+    to: EOAwalletClient.account.address,
+    data: data,
+    authorizationList: [authorization],
+    type: 'eip7702',
+  })
   await publicClient.getTransaction({ hash }).then(console.log)
 
 
-  // !!! deploy and mint ERC20 contract with gas sponsor
+// =============================================
+// ======== DEPLOY AND MINT ERC1404 CONTRACT ===
+// ======== USING GAS SPONSOR RPC ==============
+// =============================================
 
-  console.log(`Wallet EOA deploying ERC20 contract...through sponsor...`)
-  hash = await walletClient.writeContract({ 
+  console.log(`\nEOA Wallet deploying ERC1404 contract through sponsor...`)
+
+  // Encode deployContract() call using Smart EOA ABI and ERC1404 bytecode
+  data = encodeFunctionData({
     abi: smartEOAcontract.abi,
-    address: walletClient.account.address, 
     functionName: 'deployContract',
     args: [BlockdaemonERC1404.bytecode],
-    account: sponsorWallet
   })
 
-  await publicClient.waitForTransactionReceipt({ 
-    hash: hash
-  }).then(console.log)
+  // Broadcast unsigned deploy contract txn through Sponsor RPC
+  hash = await sponsorWalletClient.sendTransaction({
+    to: EOAwalletClient.account.address,
+    data: data,
+  })
+  await publicClient.waitForTransactionReceipt({ hash: hash,}).then(console.log)
 
-  // Get ETH Balance of Wallet
-  console.log(`Wallet ${EOAwallet.address} balance after DeployContract txn: ${formatEther(await publicClient.getBalance({
+  // Log ETH Balance of EOA wallet
+  console.log(`EOA Wallet ${EOAwallet.address} ETH balance after DeployContract txn: ${formatEther(await publicClient.getBalance({
     address: EOAwallet.address,
   }))} ETH`);
 
-  // Get ETH Balance of sponsor
-  console.log(`Sponsor ${sponsorWallet.address} balance after DeployContract txn: ${formatEther(await publicClient.getBalance({
-    address: sponsorWallet.address,
-  }))} ETH`);
-
-  // Get ERC20 Balance of Wallet
-  console.log(`Wallet ${EOAwallet.address} balance after DeployContract txn: ${formatEther(await publicClient.readContract({
+  // Log ERC1404 Balance of Wallet
+  console.log(`EOA wallet ${EOAwallet.address} ERC1404 balance after DeployContract txn: ${formatEther(await publicClient.readContract({
     abi: BlockdaemonERC1404.abi,
     functionName: 'balanceOf',
     address: "0xA15BB66138824a1c7167f5E85b957d04Dd34E468",
     args: [EOAwallet.address],
   }))} ERC1404`);
-  
 
-  // !!! transfer ERC20 from wallet with gas sponsor
+  // Log ETH Balance of sponsor
+  console.log(`Sponsor ${sponsorWalletPublicKey} ETH balance after DeployContract txn: ${formatEther(await publicClient.getBalance({
+    address: sponsorWalletPublicKey,
+  }))} ETH`);
 
-  console.log(`Wallet EOA transfering ERC20 funds to recipient... through sponsor...`)
-  const data = encodeFunctionData({
+
+// =========================================
+// ======== TRANSFER ERC1404 FROM EOA ======
+// ======== WALLET USING GAS SPONSOR RPC ===
+// =========================================
+
+  console.log(`\nEOA wallet transfering ERC1404 funds to recipient through sponsor...`)
+
+  // Construct ERC1404 transfer() call to recipient
+  let nestedCallData = encodeFunctionData({
     abi: BlockdaemonERC1404.abi,
     functionName: 'transfer',
-    args: ["0xcb98643b8786950F0461f3B0edf99D88F274574D", parseEther('100')],
+    args: [tokenRecipientPublicKey, parseEther('100')],
   })
 
-  hash = await walletClient.writeContract({ 
+  // Construct execute() contract call containing next transfer() call. [can include multiple contract calls / batches]
+  data = encodeFunctionData({
     abi: smartEOAcontract.abi, 
-    address: walletClient.account.address, 
     functionName: 'execute', 
     args: [[ 
       { 
-        data: data, 
+        data: nestedCallData, 
         to: "0xA15BB66138824a1c7167f5E85b957d04Dd34E468",  //ERC1404 token contract
         value: parseEther('0'),
       }
     ]], 
-    account: sponsorWallet
-  }) 
+  })
 
-  await publicClient.waitForTransactionReceipt({ 
-    hash: hash
-  }).then(console.log)
+  // Broadcast unsigned execute contract call txn through Sponsor RPC
+  hash = await sponsorWalletClient.sendTransaction({
+    to: EOAwalletClient.account.address,
+    data: data,
+  })
+  await publicClient.waitForTransactionReceipt({ hash: hash }).then(console.log)
 
 
-  // Get ETH Balance of Wallet
-  console.log(`Wallet ${EOAwallet.address} balance after Transfer txn: ${formatEther(await publicClient.getBalance({
+  // Log ETH Balance of EOA Wallet
+  console.log(`\nEOA wallet ${EOAwallet.address} ETH balance after Transfer txn: ${formatEther(await publicClient.getBalance({
     address: EOAwallet.address,
   }))} ETH`);
 
-  // Get ETH Balance of sponsor
-  console.log(`Sponsor ${sponsorWallet.address} balance after Transfer txn: ${formatEther(await publicClient.getBalance({
-    address: sponsorWallet.address,
-  }))} ETH`);
-
-  // Get ERC20 Balance of Wallet
-  console.log(`Wallet ${EOAwallet.address} balance after Transfer txn: ${formatEther(await publicClient.readContract({
+  // Log ERC1404 Balance of EOA Wallet
+  console.log(`EOA wallet ${EOAwallet.address} ERC1404 balance after Transfer txn: ${formatEther(await publicClient.readContract({
     abi: BlockdaemonERC1404.abi,
     functionName: 'balanceOf',
     address: "0xA15BB66138824a1c7167f5E85b957d04Dd34E468",
     args: [EOAwallet.address],
+  }))} ERC1404`);
+
+  // Log ETH Balance of sponsor
+  console.log(`Sponsor ${sponsorWalletPublicKey} ETH balance after Transfer txn: ${formatEther(await publicClient.getBalance({
+    address: sponsorWalletPublicKey,
+  }))} ETH`);
+
+
+  // Log ERC20 Balance of recipeint
+  console.log(`Recipient wallet ${tokenRecipientPublicKey} ERC1404 balance after Transfer txn: ${formatEther(await publicClient.readContract({
+    abi: BlockdaemonERC1404.abi,
+    functionName: 'balanceOf',
+    address: "0xA15BB66138824a1c7167f5E85b957d04Dd34E468",
+    args: [tokenRecipientPublicKey],
   }))} ERC1404`);
 
 }

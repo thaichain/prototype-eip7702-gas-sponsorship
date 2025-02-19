@@ -1,13 +1,5 @@
 {
-  "main": "./dist/src/index.js",
-  "types": "./dist/src/index.d.ts",
-  "scripts": {
-    "build": "tsc"
-  },
   "dependencies": {
-    "@blockdaemon/buildervault-web3-provider": "^0.0.4",
-    "@sepior/tsmsdkv2": "^69.0.0",
-    "asn1.js": "^5.4.1",
     "viem": "^2.22.23"
   },
   "devDependencies": {
