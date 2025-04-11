@@ -10,7 +10,7 @@ sequenceDiagram
     participant TransactionManager as Transaction<br>Crafter
     participant EOA as EOA<br>wallet
     participant Sponsor as Sponsor Wallet
-    box rgb(251,251,251) Blockchain
+    box grey Blockchain
         participant ContractAddress as Smart EOA<br>delegated contract
         participant Token as Token<br>contract
     end
@@ -46,7 +46,7 @@ foundryup
 
 ### Launch prague (Pectra) with EIP-7702 support
 ```shell
-anvil --hardfork prague
+anvil --hardfork PragueEOF
 ```
 
 ### Deploy Smart EOA implementation contract
