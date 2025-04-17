@@ -36,30 +36,6 @@ sequenceDiagram
     ContractAddress->>Token: Execute inner calldata<br>execute(to=token contract,<br> calldata=transfer(to=recipient,value=10))
 ```
 
-## Tooling
-The [foundry toolchain](https://github.com/foundry-rs/foundry?tab=readme-ov-file#installation) is used for local Prague node and contract deployment.
-```shell
-# Install Foundry
-curl -L https://foundry.paradigm.xyz | bash
-foundryup
-```
-
-### Launch prague (Pectra) with EIP-7702 support
-```shell
-anvil --hardfork PragueEOF
-```
-
-### Deploy Smart EOA implementation contract
-```shell
-forge create --private-key 0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80 \
-    --broadcast src/BatchCallDelegation.sol:BatchCallDelegation
-```
-
-### Set EOA Wallet (0 ETH) and fund Gas Sponsor EOA (10 ETH)
-```shell
-cast rpc anvil_setBalance 0xa0Ee7A142d267C1f36714E4a8F75612F20a79720 0
-cast rpc anvil_setBalance 0x70997970C51812dc3A010C7d01b50e0d17dc79C8 10000000000000000000
-```
 
 ### Launch Gas Sponsor RPC node
 ```shell

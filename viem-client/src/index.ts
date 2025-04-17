@@ -6,11 +6,20 @@ import { BlockdaemonERC1404 } from './BlockdaemonERC1404'
 
 const sponsorWalletPublicKey = '0x70997970C51812dc3A010C7d01b50e0d17dc79C8'  // Sponsoring RPC node has private key mounted to sign unsigned txn and broadcast
 const tokenRecipientPublicKey = '0xcb98643b8786950F0461f3B0edf99D88F274574D'
+export const sichainTestnet = {
+  ...anvil,
+  id: 700011,
+  rpcUrls: {
+    default: {
+      http: ["https://sichang-rpc.thaichain.org/"],
+    },
+  },
+};
 
 async function main() {
 
   const publicClient = createPublicClient({
-    chain: anvil,
+    chain: sichainTestnet,
     transport: http()
   })
 
@@ -19,14 +28,14 @@ async function main() {
   // Create EOA wallet client to sign Authorization # TODO: Use BuilderVault EIP1193 web3 provider for MPC signing
   const EOAwalletClient = createWalletClient({ 
     account: EOAwallet,
-    chain: anvil,
+    chain: sichainTestnet,
     transport: http(),
   })
 
   // Create sponsor wallet client to relay through Sponsor RPC API
   const sponsorWalletClient = createWalletClient({ 
     account: sponsorWalletPublicKey,
-    chain: anvil,
+    chain: sichainTestnet,
     transport: http("http://localhost:9999"),
   })
 

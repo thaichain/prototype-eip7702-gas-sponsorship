@@ -6,12 +6,21 @@ import { anvil } from 'viem/chains'
 
 const app = express();
 const jsonRpcServer = new JSONRPCServer();
+export const sichainTestnet = {
+  ...anvil,
+  id: 700011,
+  rpcUrls: {
+    default: {
+      http: ["https://sichang-rpc.thaichain.org/"],
+    },
+  },
+};
 
 const sponsorWallet = privateKeyToAccount('0x59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d')
 const sponsorWalletClient = createWalletClient({ 
     account: sponsorWallet,
-    chain: anvil,
-    transport: http("http://localhost:8545"),
+    chain: sichainTestnet,
+    transport: http("https://sichang-rpc.thaichain.org"),
 })
 
 app.use(express.json());
@@ -31,7 +40,7 @@ jsonRpcServer.addMethod("eth_sendTransaction", async (params) => {
     const signature = await sponsorWalletClient.signTransaction({...request});
     console.log('signed serialized txn:', signature);
 
-    let response = await fetch('http://localhost:8545', {
+    let response = await fetch('https://sichang-rpc.thaichain.org', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -49,7 +58,7 @@ jsonRpcServer.addMethod("eth_sendTransaction", async (params) => {
 });
 
 jsonRpcServer.addMethod('eth_chainId', async (params) => {
-    const response = await fetch('http://localhost:8545', {
+    const response = await fetch('https://sichang-rpc.thaichain.org', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
